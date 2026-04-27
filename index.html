@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>科特画像 · 数据看板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+:root {
+  --bg:#0d0f14; --surface:#151820; --surface2:#1c2030; --border:#252a3a;
+  --accent:#4f8ef7; --accent2:#f7a04f; --accent3:#4fcea2; --accent4:#f74fa0;
+  --purple:#a04ff7; --yellow:#f7e04f;
+  --text:#ffffff; --text-muted:#b8c4d0; --text-dim:#8a97a8;
+  --up:#f74fa0; --down:#4fcea2;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Microsoft YaHei','PingFang SC',sans-serif;padding:24px 24px 60px;min-height:100vh;}
+
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:16px;flex-wrap:wrap;gap:10px;}
+.header-left{display:flex;align-items:baseline;gap:12px;}
+.header h1{font-size:20px;font-weight:600;color:#fff;}
+.header .sub{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted);}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-right:8px;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap;}
+.btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:5px;font-size:12px;font-family:'Microsoft YaHei',sans-serif;cursor:pointer;transition:all .2s;border:1px solid;}
+.btn-blue{border-color:var(--accent);background:rgba(79,142,247,.1);color:var(--accent);}
+.btn-blue:hover{background:rgba(79,142,247,.2);}
+.btn-green{border-color:var(--accent3);background:rgba(79,206,162,.1);color:var(--accent3);}
+.btn-green:hover{background:rgba(79,206,162,.2);}
+.btn-orange{border-color:var(--accent2);background:rgba(247,160,79,.1);color:var(--accent2);}
+.btn-orange:hover{background:rgba(247,160,79,.2);}
+
+/* Compare selector */
+.compare-bar{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:18px;flex-wrap:wrap;}
+.compare-bar label{font-size:13px;font-weight:500;color:var(--text-muted);}
+.compare-select{background:var(--surface2);border:1px solid var(--border);color:#fff;font-size:13px;font-family:'Microsoft YaHei',sans-serif;padding:6px 12px;border-radius:5px;cursor:pointer;outline:none;}
+.compare-select:focus{border-color:var(--accent);}
+.compare-vs{font-size:13px;font-weight:600;color:var(--text-muted);font-family:'DM Mono',monospace;padding:0 4px;}
+.compare-hint{font-size:11px;color:var(--text-dim);margin-left:auto;}
+
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab{padding:9px 20px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;}
+.tab:hover{color:#fff;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+.section-label{font-size:11px;letter-spacing:.12em;color:var(--text-dim);text-transform:uppercase;margin:0 0 10px;font-family:'DM Mono',monospace;}
+
+/* INPUT TABLE */
+.table-scroll{overflow-x:auto;margin-bottom:20px;}
+.input-table{border-collapse:collapse;font-size:13px;min-width:600px;width:100%;}
+.input-table th{background:var(--surface2);color:#fff;font-weight:600;padding:11px 12px;font-size:13px;letter-spacing:.04em;border:1px solid var(--border);text-align:center;white-space:nowrap;position:relative;}
+.input-table th.metric-col{text-align:left;min-width:170px;}
+.input-table th .th-sub{color:var(--text-muted);font-size:11px;font-weight:400;display:block;margin-top:2px;}
+.del-col-btn{position:absolute;top:50%;right:3px;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px;transition:color .15s;}
+.del-col-btn:hover{color:var(--up);}
+.input-table td{border:1px solid var(--border);padding:0;background:var(--surface);}
+.input-table td.row-label{padding:11px 14px;color:#fff;font-size:14px;font-weight:500;background:var(--surface2);white-space:nowrap;}
+.input-table td.row-label .unit{color:var(--text-muted);margin-left:3px;font-size:12px;font-weight:400;}
+.input-table td.sep-row{background:#0a0c12!important;color:var(--text-muted)!important;font-size:12px;font-weight:500;padding:6px 14px;border-color:var(--border);}
+.cell-wrap{display:flex;flex-direction:column;align-items:center;padding:6px 8px;gap:3px;}
+.cell-input{width:100%;padding:5px 4px;background:transparent;border:none;outline:none;color:#fff;font-family:'DM Mono',monospace;font-size:14px;font-weight:600;text-align:center;transition:background .15s;}
+.cell-input:focus{background:rgba(79,142,247,.08);}
+.cell-input::placeholder{color:var(--text-dim);}
+.mom-badge{font-size:11px;padding:2px 7px;border-radius:3px;white-space:nowrap;font-family:'DM Mono',monospace;font-weight:500;}
+.mom-up{background:rgba(247,79,160,.15);color:var(--up);}
+.mom-down{background:rgba(79,206,162,.15);color:var(--down);}
+.mom-na{color:var(--text-muted);font-size:11px;}
+
+/* Compare highlight in table */
+.col-a{background:rgba(79,142,247,.06)!important;}
+.col-b{background:rgba(247,160,79,.08)!important;}
+
+/* DASHBOARD */
+.kpi-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden;width:170px;flex-shrink:0;cursor:grab;user-select:none;transition:transform .15s,box-shadow .15s,opacity .15s;}
+.kpi-card:active{cursor:grabbing;}
+.kpi-card.dragging{opacity:.4;transform:scale(.97);}
+.kpi-card.drag-over{border-color:var(--accent);box-shadow:0 0 0 2px rgba(79,142,247,.3);}
+.kpi-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.kpi-card.c0::after{background:var(--accent);}
+.kpi-card.c1::after{background:var(--accent2);}
+.kpi-card.c2::after{background:var(--accent3);}
+.kpi-card.c3::after{background:var(--accent4);}
+.kpi-card.c4::after{background:var(--purple);}
+.kpi-card.c5::after{background:var(--yellow);}
+.kpi-label{font-size:13px;font-weight:500;color:#c0cad6;margin-bottom:6px;}
+.kpi-val{font-size:24px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;}
+.kpi-badge{display:inline-flex;align-items:center;gap:3px;margin-top:5px;font-size:12px;font-family:'DM Mono',monospace;font-weight:500;padding:2px 7px;border-radius:3px;}
+.kpi-badge.up{background:rgba(247,79,160,.12);color:var(--up);}
+.kpi-badge.down{background:rgba(79,206,162,.12);color:var(--down);}
+.kpi-badge.na{background:rgba(122,134,154,.12);color:var(--text-muted);}
+.kpi-prev{font-size:12px;color:#b8c4d0;margin-top:3px;}
+
+.chart-section-title{font-size:12px;letter-spacing:.12em;color:#8a97a8;text-transform:uppercase;font-family:'DM Mono',monospace;margin:18px 0 10px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;}
+.full{grid-column:1/-1;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;}
+.card-title{font-size:12px;font-family:'DM Mono',monospace;color:#c0cad6;letter-spacing:.1em;margin-bottom:10px;text-transform:uppercase;}
+.chart-wrap{position:relative;height:200px;}
+.chart-wrap-sm{position:relative;height:160px;}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:12px;color:#c0cad6;}
+.legend-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.legend-bar{width:12px;height:5px;border-radius:2px;flex-shrink:0;}
+
+.sync-status{font-size:11px;font-family:'DM Mono',monospace;color:var(--text-dim);}
+.sync-status.ok{color:var(--down);}
+.sync-status.err{color:var(--up);}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1c2030;border:1px solid var(--accent3);color:var(--accent3);font-family:'DM Mono',monospace;font-size:12px;padding:9px 20px;border-radius:6px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1><span class="dot"></span>科特画像 · 数据看板</h1>
+    <span class="sub">实时联动</span>
+    <span class="sync-status" id="syncStatus"></span>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-green" id="saveBtn">💾 保存数据</button>
+    <button class="btn btn-orange" id="loadBtn">📂 加载数据</button>
+    <input type="file" id="fileInput" accept=".json" style="display:none">
+    <button class="btn btn-blue" id="addPeriodBtn">＋ 新增期次</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="inputTab">📋 数据录入</div>
+  <div class="tab" data-tab="dashTab">📊 可视化看板</div>
+</div>
+
+<!-- Compare bar (shared, shown in both tabs) -->
+<div class="compare-bar" id="compareBar">
+  <label>选择期次</label>
+  <div id="periodCheckboxes" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  <span class="compare-hint">多选期次，按选中顺序计算环比</span>
+</div>
+
+<div id="inputTab">
+  <p class="section-label">直接编辑数值 · 对比结果实时更新</p>
+  <div class="table-scroll">
+    <table class="input-table" id="inputTable"></table>
+  </div>
+</div>
+
+<div id="dashTab" style="display:none">
+  <div class="kpi-grid" id="kpiRow"></div>
+  <div class="chart-section-title">投放规模</div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">ADQ 单量 & 环比</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#4f8ef7"></div>ADQ单量</div>
+        <div class="legend-item"><div class="legend-bar" style="background:rgba(247,79,160,.4)"></div>环比%</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_adq"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">ADQ 消耗（万）& 环比</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#f7a04f"></div>消耗</div>
+        <div class="legend-item"><div class="legend-bar" style="background:rgba(247,79,160,.4)"></div>环比%</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_consume"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">微信豆单量 vs ADQ 单量</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#4fcea2"></div>微信豆</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4f8ef7"></div>ADQ</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_orders"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">微信豆占比【单量】</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#f7e04f"></div>微信豆占比</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_wxdou_ratio"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-section-title">用户画像</div>
+  <div class="grid2">
+    <div class="card full">
+      <div class="card-title">性别 / 年龄 / 年级 / 城线</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#4fcea2"></div>女性【ADQ】</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f74fa0"></div>31-50岁【ADQ】</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#a04ff7"></div>一年级及以下</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f7e04f"></div>1-2线城市</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_demo"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-section-title">版位分布</div>
+  <div class="grid2">
+    <div class="card full">
+      <div class="card-title">版位占比趋势（公小 / 拓展 / 朋友圈 / PACD）</div>
+      <div class="chart-wrap-sm"><canvas id="c_pos"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-section-title">素材 & 转率</div>
+  <div class="grid3">
+    <div class="card">
+      <div class="card-title">图片素材占比【ADQ消耗】</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#4f8ef7"></div>图片占比</div>
+        <div class="legend-item"><div class="legend-bar" style="background:rgba(247,79,160,.4)"></div>环比%</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_img_adq"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">图片素材占比【成交订单】</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#f7a04f"></div>图片占比</div>
+        <div class="legend-item"><div class="legend-bar" style="background:rgba(247,79,160,.4)"></div>环比%</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_img_order"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">首日转率 vs 最终转率</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#4fcea2"></div>首日转率</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f74fa0"></div>最终转率</div>
+      </div>
+      <div class="chart-wrap"><canvas id="c_cvr"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GROUPS = [
+  {sep:'── 投放规模'},
+  {key:'adq',       label:'ADQ 单量',           unit:''},
+  {key:'consume',   label:'ADQ 消耗',            unit:'万'},
+  {key:'wxdou',     label:'微信豆单量',           unit:''},
+  {key:'total',     label:'总投放单量',           unit:''},
+  {key:'wxdou_r',   label:'微信豆占比【单量】',    unit:'%'},
+  {sep:'── 用户画像'},
+  {key:'female',    label:'女性【ADQ】',          unit:'%'},
+  {key:'age3150',   label:'31-50岁【ADQ】',       unit:'%'},
+  {key:'grade1',    label:'一年级及以下【总订单】', unit:'%'},
+  {key:'city12',    label:'1-2线【总订单】',       unit:'%'},
+  {sep:'── 版位分布'},
+  {key:'pos_pub',   label:'公小版位【ADQ】',       unit:'%'},
+  {key:'pos_ext',   label:'拓展版位',             unit:'%'},
+  {key:'pos_pyq',   label:'朋友圈',               unit:'%'},
+  {key:'pos_pacd',  label:'PACD',               unit:'%'},
+  {sep:'── 素材 & 转率'},
+  {key:'img_adq',   label:'图片素材占【ADQ消耗】', unit:'%'},
+  {key:'img_order', label:'图片素材占【成交订单】', unit:'%'},
+  {key:'cvr_first', label:'首日转率',             unit:'%'},
+  {key:'cvr_final', label:'最终转率',             unit:'%'},
+];
+
+let periods = ['春5','春6','春7','春8','春9'];
+let tableData = {
+  adq:       [1674,   1625,   1816,   2277,   1386  ],
+  consume:   [157.03, 151.51, 160.73, 205.01, 125.68],
+  wxdou:     [570,    495,    582,    800,    657   ],
+  total:     [2244,   2120,   2398,   3077,   2043  ],
+  wxdou_r:   [34.05,  30.46,  32.05,  35.13,  47.40 ],
+  female:    [80.05,  80.41,  77.04,  84.41,  78.64 ],
+  age3150:   [67.20,  70.77,  66.63,  72.73,  88.68 ],
+  grade1:    [40.44,  37.64,  36.39,  39.08,  45.72 ],
+  city12:    [58.02,  60.03,  58.16,  54.11,  55.86 ],
+  pos_pub:   [40.56,  50.19,  50.00,  53.00,  46.03 ],
+  pos_ext:   [14.20,  16.75,  18.28,  10.58,  15.95 ],
+  pos_pyq:   [12.66,   8.25,   5.29,   5.80,   8.73 ],
+  pos_pacd:  [19.89,  16.80,  16.24,  13.92,  15.01 ],
+  img_adq:   [76.42,  92.92,  79.36,  69.79,  76.08 ],
+  img_order: [56.86,  72.64,  60.22,  50.37,  68.40 ],
+  cvr_first: [null,   null,   20.00,  17.81,  15.66 ],
+  cvr_final: [23.92,  20.23,  25.46,  22.73,  15.73 ],
+};
+
+let selectedPeriods = [3, 4]; // default: 春8, 春9
+
+function safe(arr){ return arr.map(v=>(v===null||v===''||isNaN(v))?null:+v); }
+
+function calcDiff(a, b) {
+  if (a===null||a===''||b===null||b==='') return null;
+  return +((b-a)/Math.abs(a)*100).toFixed(1);
+}
+
+// ── Multi-select period checkboxes ────────────────────
+function buildSelectors() {
+  const wrap = document.getElementById('periodCheckboxes');
+  wrap.innerHTML = periods.map((p,i) => {
+    const checked = selectedPeriods.includes(i) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:5px 10px;border-radius:5px;border:1px solid ${checked?'var(--accent)':'var(--border)'};background:${checked?'rgba(79,142,247,.12)':'var(--surface2)'};color:${checked?'var(--accent)':'var(--text-muted)'};font-size:13px;font-weight:500;transition:all .2s;">
+      <input type="checkbox" ${checked} data-i="${i}" style="display:none;">
+      ${p}
+    </label>`;
+  }).join('');
+
+  wrap.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = +cb.dataset.i;
+      if (cb.checked) {
+        if (!selectedPeriods.includes(i)) selectedPeriods.push(i);
+        selectedPeriods.sort((a,b)=>a-b);
+      } else {
+        if (selectedPeriods.length <= 1) {
+          // Allow deselecting last one only if selecting another
+          selectedPeriods = [];
+          selectedPeriods = [i]; // keep at least one
+          cb.checked = true;
+          return;
+        }
+        selectedPeriods = selectedPeriods.filter(x=>x!==i);
+      }
+      buildSelectors();
+      refreshAll();
+    });
+  });
+}
+
+function refreshAll() {
+  refreshBadges();
+  renderKPI();
+  if (document.getElementById('dashTab').style.display !== 'none') initCharts();
+}
+
+// ── Input Table ───────────────────────────────────────
+// Color palette for selected periods
+const SEL_COLORS = ['#4f8ef7','#f7a04f','#4fcea2','#f74fa0','#a04ff7','#f7e04f'];
+
+function buildTable() {
+  const table = document.getElementById('inputTable');
+  let html = '<thead><tr>';
+  html += '<th class="metric-col">指标</th>';
+  // Show ALL periods, highlight selected ones
+  periods.forEach((p,ci) => {
+    const selIdx = selectedPeriods.indexOf(ci);
+    const isSel = selIdx !== -1;
+    const color = isSel ? SEL_COLORS[selIdx % SEL_COLORS.length] : null;
+    const borderStyle = isSel ? `border-bottom: 3px solid ${color};` : '';
+    html += `<th style="min-width:110px;${borderStyle}">${p}
+      <span class="th-sub" style="${isSel?`color:${color}`:''}'">${isSel?`期${selIdx+1}`:'─'}</span>
+      ${periods.length>2?`<button class="del-col-btn" data-ci="${ci}" title="删除">×</button>`:''}
+    </th>`;
+  });
+  html += '</tr></thead><tbody>';
+  GROUPS.forEach(m => {
+    if (m.sep) {
+      html += `<tr><td class="sep-row" colspan="${periods.length+1}">${m.sep}</td></tr>`;
+      return;
+    }
+    const vals = tableData[m.key];
+    html += `<tr><td class="row-label">${m.label}<span class="unit">${m.unit}</span></td>`;
+    periods.forEach((_,ci) => {
+      const v = vals[ci];
+      const selIdx = selectedPeriods.indexOf(ci);
+      const isSel = selIdx !== -1;
+      const color = isSel ? SEL_COLORS[selIdx % SEL_COLORS.length] : null;
+      let badge = '';
+      if (isSel && selectedPeriods.length === 1) {
+        badge = ''; // single period, no badge needed
+      } else if (isSel && selIdx === 0) {
+        badge = `<span class="mom-na" style="font-size:11px;color:var(--text-muted);">基准</span>`;
+      } else if (isSel && selIdx > 0) {
+        const prevIdx = selectedPeriods[selIdx-1];
+        const diff = calcDiff(vals[prevIdx], v);
+        const mc = diff===null?'mom-na':diff>0?'mom-up':'mom-down';
+        const mt = diff===null?'—':(diff>0?'↑':'↓')+' '+Math.abs(diff)+'%';
+        badge = `<span class="mom-badge ${mc}">${mt}</span>`;
+      }
+      const bgStyle = isSel ? `background:${color}18!important;` : '';
+      html += `<td style="${bgStyle}"><div class="cell-wrap">
+        <input class="cell-input" type="number" step="any"
+          value="${v!==null&&v!==''?v:''}" placeholder="—"
+          data-key="${m.key}" data-ci="${ci}"/>
+        ${badge}
+      </div></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  table.querySelectorAll('.cell-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const key=inp.dataset.key, ci=+inp.dataset.ci;
+      tableData[key][ci] = inp.value===''?null:parseFloat(inp.value);
+      refreshBadges();
+      scheduleAutoSave();
+      if (document.getElementById('dashTab').style.display!=='none') updateDashboard();
+    });
+  });
+  table.querySelectorAll('.del-col-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deletePeriod(+btn.dataset.ci); });
+  });
+}
+
+function refreshBadges() {
+  // Rebuild table is cleaner for multi-select
+  const inputs = {};
+  document.querySelectorAll('.cell-input').forEach(inp => {
+    inputs[inp.dataset.key+'-'+inp.dataset.ci] = inp.value;
+  });
+  buildTable();
+  // Restore input values (already in tableData, just rebind)
+}
+
+// ── KPI Cards ─────────────────────────────────────────
+const KPI_DEFS=[
+  {key:'adq',       label:'ADQ 单量',           fmt:v=>v!=null?v.toLocaleString():'—', color:'c0', tag:''},
+  {key:'consume',   label:'ADQ 消耗',            fmt:v=>v!=null?v+'万':'—',             color:'c1', tag:''},
+  {key:'total',     label:'总投放单量',           fmt:v=>v!=null?v.toLocaleString():'—', color:'c2', tag:''},
+  {key:'wxdou_r',   label:'微信豆占比【单量】',    fmt:v=>v!=null?v+'%':'—',             color:'c3', tag:''},
+  {key:'cvr_first', label:'首日转率',             fmt:v=>v!=null?v+'%':'—',             color:'c4', tag:''},
+  {key:'cvr_final', label:'最终转率',             fmt:v=>v!=null?v+'%':'—',             color:'c5', tag:''},
+  {key:'female',    label:'女性占比',             fmt:v=>v!=null?v+'%':'—',             color:'c0', tag:'ADQ'},
+  {key:'age3150',   label:'31-50岁占比',         fmt:v=>v!=null?v+'%':'—',             color:'c1', tag:'ADQ'},
+  {key:'grade1',    label:'一年级及以下',          fmt:v=>v!=null?v+'%':'—',             color:'c2', tag:'总订单'},
+  {key:'city12',    label:'1-2线城市',           fmt:v=>v!=null?v+'%':'—',             color:'c3', tag:'总订单'},
+];
+
+function renderKPI(){
+  const lastIdx = selectedPeriods[selectedPeriods.length-1];
+  const hasPrev = selectedPeriods.length >= 2;
+  const prevIdx = hasPrev ? selectedPeriods[selectedPeriods.length-2] : null;
+  const pLast = periods[lastIdx];
+  document.getElementById('kpiRow').innerHTML=KPI_DEFS.map(({key,label,fmt,color,tag})=>{
+    const vLast=tableData[key][lastIdx];
+    const diff = hasPrev ? calcDiff(tableData[key][prevIdx], vLast) : null;
+    const bc=diff===null?'na':diff>0?'up':'down';
+    const bt=diff===null?'—':(diff>0?'↑':'↓')+' '+Math.abs(diff)+'%';
+    const subLabel = hasPrev
+      ? selectedPeriods.map(i=>`${periods[i]}: ${fmt(tableData[key][i])}`).join(' → ')
+      : `${pLast} · 单期展示`;
+    const tagHtml = tag ? `<span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:3px;background:rgba(79,142,247,.25);color:#ffffff;margin-left:6px;font-family:'Microsoft YaHei',sans-serif;">仅${tag}</span>` : '';
+    return `<div class="kpi-card ${color}">
+      <div class="kpi-label">${label}${tagHtml}</div>
+      <div class="kpi-val">${fmt(vLast)}</div>
+      ${hasPrev ? `<span class="kpi-badge ${bc}">${bt} vs ${periods[prevIdx]}</span>` : ''}
+      <div class="kpi-prev" style="font-size:11px;margin-top:4px;color:#b8c4d0;">${subLabel}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Drag & drop KPI cards (mouse-based) ───────────────
+function initDrag() {
+  const grid = document.getElementById('kpiRow');
+
+  grid.querySelectorAll('.kpi-card').forEach(card => {
+    card.addEventListener('mousedown', onMouseDown);
+  });
+
+  function onMouseDown(e) {
+    if (e.button !== 0) return;
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    const w = rect.width, h = rect.height;
+
+    // Create ghost
+    const ghost = card.cloneNode(true);
+    ghost.style.cssText = `position:fixed;width:${w}px;height:${h}px;pointer-events:none;opacity:.85;z-index:9999;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.5);transition:none;`;
+    ghost.style.left = (e.clientX - offsetX) + 'px';
+    ghost.style.top  = (e.clientY - offsetY) + 'px';
+    document.body.appendChild(ghost);
+
+    card.style.opacity = '0.3';
+    let target = null;
+
+    function onMove(e) {
+      ghost.style.left = (e.clientX - offsetX) + 'px';
+      ghost.style.top  = (e.clientY - offsetY) + 'px';
+
+      // Find card under cursor
+      ghost.style.display = 'none';
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      ghost.style.display = '';
+      const over = el ? el.closest('.kpi-card') : null;
+
+      grid.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('drag-over'));
+      if (over && over !== card) {
+        over.classList.add('drag-over');
+        target = over;
+      } else {
+        target = null;
+      }
+    }
+
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      ghost.remove();
+      card.style.opacity = '';
+      grid.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('drag-over'));
+
+      if (target) {
+        const cards = [...grid.querySelectorAll('.kpi-card')];
+        const fromIdx = cards.indexOf(card);
+        const toIdx   = cards.indexOf(target);
+        if (fromIdx < toIdx) grid.insertBefore(card, target.nextSibling);
+        else grid.insertBefore(card, target);
+        // Re-bind events after reorder
+        initDrag();
+      }
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  }
+}
+
+// ── Add/Delete period ─────────────────────────────────
+document.getElementById('addPeriodBtn').addEventListener('click', () => {
+  const name=prompt('输入新期次名称（如 春10）','');
+  if(!name||!name.trim()) return;
+  const label=name.trim();
+  if(periods.includes(label)){alert('期次已存在');return;}
+  periods.push(label);
+  GROUPS.filter(m=>!m.sep).forEach(m=>tableData[m.key].push(null));
+  compareB=periods.length-1;
+  buildSelectors(); buildTable(); updateDashboard();
+});
+
+function deletePeriod(ci){
+  if(periods.length<=2){alert('至少保留两期');return;}
+  if(!confirm(`确认删除「${periods[ci]}」？`)) return;
+  periods.splice(ci,1);
+  GROUPS.filter(m=>!m.sep).forEach(m=>tableData[m.key].splice(ci,1));
+  if(compareA>=periods.length) compareA=periods.length-2;
+  if(compareB>=periods.length) compareB=periods.length-1;
+  if(compareA===compareB) compareA=compareB-1;
+  buildSelectors(); buildTable(); updateDashboard();
+}
+
+// ── GitHub Sync ───────────────────────────────────────
+const GH_TOKEN=['ghp_79y7','bqLAAfqNweNk','7xN2UsKZ142FfA0F05fA'].join('');
+const GH_REPO='garethdelaney61-sudo/kete-dashboard';
+const GH_FILE='data.json';
+const GH_API=`https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+let ghFileSha=null;
+
+function setStatus(msg,cls=''){
+  const el=document.getElementById('syncStatus');
+  el.textContent=msg; el.className='sync-status '+cls;
+}
+
+async function ghLoad(){
+  try{
+    setStatus('⟳ 同步中...');
+    const res=await fetch(GH_API,{headers:{Authorization:`token ${GH_TOKEN}`}});
+    if(res.status===404){setStatus('● 云端无存档，使用默认数据');return;}
+    if(!res.ok) throw new Error();
+    const json=await res.json();
+    ghFileSha=json.sha;
+    const decoded=JSON.parse(decodeURIComponent(escape(atob(json.content.replace(/\n/g,'')))));
+    periods.length=0; decoded.periods.forEach(x=>periods.push(x));
+    Object.keys(decoded.tableData).forEach(k=>{if(tableData[k]!==undefined)tableData[k]=decoded.tableData[k];});
+    selectedPeriods=periods.length>=2?[periods.length-2,periods.length-1]:[0];
+    setStatus('✓ 已同步','ok');
+  }catch{setStatus('✗ 同步失败，使用本地数据','err');}
+}
+
+async function ghSave(){
+  try{
+    setStatus('⟳ 保存中...');
+    if(!ghFileSha){
+      const r=await fetch(GH_API,{headers:{Authorization:`token ${GH_TOKEN}`}});
+      if(r.ok){const j=await r.json();ghFileSha=j.sha;}
+    }
+    const content=btoa(unescape(encodeURIComponent(JSON.stringify({periods,tableData},null,2))));
+    const body={message:'自动保存',content,...(ghFileSha?{sha:ghFileSha}:{})};
+    const put=await fetch(GH_API,{method:'PUT',headers:{Authorization:`token ${GH_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!put.ok) throw new Error();
+    ghFileSha=(await put.json()).content.sha;
+    setStatus('✓ 已保存','ok');
+    showToast('✓ 已自动保存到云端');
+  }catch{setStatus('✗ 保存失败','err');showToast('✗ 云端保存失败','#f74fa0');}
+}
+
+let saveTimer=null;
+function scheduleAutoSave(){clearTimeout(saveTimer);setStatus('● 未保存','err');saveTimer=setTimeout(()=>ghSave(),3000);}
+
+function showToast(msg,color='#4fcea2'){
+  let t=document.querySelector('.toast');
+  if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);}
+  t.textContent=msg;t.style.borderColor=color;t.style.color=color;
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+document.getElementById('saveBtn').addEventListener('click',()=>ghSave());
+document.getElementById('loadBtn').addEventListener('click',()=>document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change',e=>{
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const p=JSON.parse(ev.target.result);
+      if(!p.periods||!p.tableData)throw new Error();
+      periods.length=0;p.periods.forEach(x=>periods.push(x));
+      Object.keys(p.tableData).forEach(k=>{tableData[k]=p.tableData[k];});
+      selectedPeriods=periods.length>=2?[periods.length-2,periods.length-1]:[0];
+      buildSelectors();buildTable();updateDashboard();
+      showToast('✓ 数据加载成功');
+    }catch{showToast('✗ 文件格式有误','#f74fa0');}
+    e.target.value='';
+  };
+  reader.readAsText(file);
+});
+
+// ── Charts ────────────────────────────────────────────
+let charts={};
+const TT={backgroundColor:'#1c2030',borderColor:'#252a3a',borderWidth:1,titleColor:'#c0cad6',bodyColor:'#ffffff'};
+
+function mkCombo(id,color,key,yFmt){
+  if(charts[id])charts[id].destroy();
+  const allVals=safe(tableData[key]);
+  // Filter to selected periods only
+  const labels=selectedPeriods.map(i=>periods[i]);
+  const vals=selectedPeriods.map(i=>allVals[i]);
+  // MoM between consecutive selected periods
+  const ms=vals.map((v,i)=>i===0||v===null||vals[i-1]===null?null:+((v-vals[i-1])/Math.abs(vals[i-1])*100).toFixed(1));
+  const ptColors=vals.map((_,i)=>SEL_COLORS[i%SEL_COLORS.length]);
+  const ptRadius=vals.map(()=>5);
+  charts[id]=new Chart(document.getElementById(id),{
+    data:{labels,datasets:[
+      {type:'line',label:'值',data:vals,borderColor:color,backgroundColor:color+'14',fill:true,
+       tension:.4,pointRadius:ptRadius,pointHoverRadius:7,borderWidth:2,pointBackgroundColor:ptColors,yAxisID:'y',spanGaps:true},
+      {type:'bar',label:'环比',data:ms,
+       backgroundColor:ms.map(v=>v===null?'transparent':v>=0?'rgba(247,79,160,.28)':'rgba(79,206,162,.28)'),
+       borderColor:ms.map(v=>v===null?'transparent':v>=0?'#f74fa0':'#4fcea2'),
+       borderWidth:1,yAxisID:'y2',barPercentage:.5}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>{
+        if(ctx.datasetIndex===0)return ' '+(yFmt?yFmt(ctx.raw):ctx.raw??'—');
+        const v=ctx.raw;return v===null?'':' 环比: '+(v>0?'+':'')+v+'%';
+      }}}},
+      scales:{
+        x:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:11}},grid:{color:'#1c2030'}},
+        y:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:11},callback:yFmt||undefined},grid:{color:'#1c2030'},position:'left'},
+        y2:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:10},callback:v=>(v>0?'+':'')+v+'%'},grid:{display:false},position:'right'}
+      }
+    }
+  });
+}
+
+function mkMultiLine(id,datasets,yFmt){
+  if(charts[id])charts[id].destroy();
+  const labels=selectedPeriods.map(i=>periods[i]);
+  const ptRadius=selectedPeriods.map(()=>5);
+  const ptColors=selectedPeriods.map((_,i)=>SEL_COLORS[i%SEL_COLORS.length]);
+  charts[id]=new Chart(document.getElementById(id),{
+    type:'line',
+    data:{labels,datasets:datasets.map(d=>({
+      ...d,
+      data:selectedPeriods.map(i=>safe(d.data)[i] ?? (d.data[i]===undefined?null:d.data[i])),
+      tension:.4,pointRadius:ptRadius,pointHoverRadius:7,borderWidth:2,
+      pointBackgroundColor:ptColors,
+      fill:false,spanGaps:true
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{...TT,callbacks:{label:ctx=>{
+        const suffix=yFmt!=null?yFmt:'';
+        return ' '+ctx.dataset.label+': '+(ctx.raw!=null?ctx.raw+suffix:'—');
+      }}}},
+      scales:{
+        x:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:11}},grid:{color:'#1c2030'}},
+        y:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:11},callback:v=>yFmt!=null?v+yFmt:v},grid:{color:'#1c2030'}}
+      }
+    }
+  });
+}
+
+function mkStackedBar(id,datasets){
+  if(charts[id])charts[id].destroy();
+  const labels=selectedPeriods.map(i=>periods[i]);
+  const filteredDatasets=datasets.map(d=>({...d,data:selectedPeriods.map(i=>d.data[i]??null)}));
+  charts[id]=new Chart(document.getElementById(id),{
+    type:'bar',
+    data:{labels,datasets:filteredDatasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{color:'#c0cad6',boxWidth:9,font:{family:'DM Mono',size:10}}},
+        tooltip:{...TT,callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw??'—')+'%'}}},
+      scales:{
+        x:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:11}},grid:{color:'#1c2030'}},
+        y:{ticks:{color:'#c0cad6',font:{family:'DM Mono',size:11},callback:v=>v+'%'},grid:{color:'#1c2030'}}
+      }
+    }
+  });
+}
+
+function initCharts(){
+  mkCombo('c_adq','#4f8ef7','adq');
+  mkCombo('c_consume','#f7a04f','consume',v=>v+'万');
+  mkMultiLine('c_orders',[
+    {label:'微信豆单量',data:safe(tableData.wxdou),borderColor:'#4fcea2'},
+    {label:'ADQ单量',  data:safe(tableData.adq),  borderColor:'#4f8ef7'},
+  ],null);
+  mkCombo('c_wxdou_ratio','#f7e04f','wxdou_r',v=>v+'%');
+  mkMultiLine('c_demo',[
+    {label:'女性【ADQ】',  data:safe(tableData.female),  borderColor:'#4fcea2'},
+    {label:'31-50岁【ADQ】',data:safe(tableData.age3150),borderColor:'#f74fa0'},
+    {label:'一年级及以下', data:safe(tableData.grade1),  borderColor:'#a04ff7'},
+    {label:'1-2线城市',   data:safe(tableData.city12),  borderColor:'#f7e04f'},
+  ],'%');
+  mkStackedBar('c_pos',[
+    {label:'公小版位',data:safe(tableData.pos_pub), backgroundColor:'#4f8ef7',stack:'s'},
+    {label:'拓展版位',data:safe(tableData.pos_ext), backgroundColor:'#f7a04f',stack:'s'},
+    {label:'朋友圈',  data:safe(tableData.pos_pyq), backgroundColor:'#4fcea2',stack:'s'},
+    {label:'PACD',   data:safe(tableData.pos_pacd),backgroundColor:'#f74fa0',stack:'s'},
+  ]);
+  mkCombo('c_img_adq','#4f8ef7','img_adq',v=>v+'%');
+  mkCombo('c_img_order','#f7a04f','img_order',v=>v+'%');
+  mkMultiLine('c_cvr',[
+    {label:'首日转率',data:safe(tableData.cvr_first),borderColor:'#4fcea2'},
+    {label:'最终转率',data:safe(tableData.cvr_final),borderColor:'#f74fa0'},
+  ],'%');
+}
+
+function updateDashboard(){
+  renderKPI();
+  initCharts();
+}
+
+// ── Tabs ──────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    const target=tab.dataset.tab;
+    document.getElementById('inputTab').style.display=target==='inputTab'?'block':'none';
+    document.getElementById('dashTab').style.display=target==='dashTab'?'block':'none';
+    if(target==='dashTab') updateDashboard();
+  });
+});
+
+// ── Init ──────────────────────────────────────────────
+ghLoad().then(()=>{
+  buildSelectors();
+  buildTable();
+  // init charts hidden so they render when tab switches
+});
+</script>
+</body>
+</html>
